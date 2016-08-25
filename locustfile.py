@@ -78,7 +78,7 @@ class APITasks(TaskSet):
 		self.username = "test_user_" + str(uuid.uuid4())
 
 		self.password = "test_password"
-		customer = self.client.post("/customers", json={"firstName": "testUser_" + str(counter), "lastName": "Last_Name", "username": self.username})
+		customer = self.client.post("/register", json={"username": self.username, "password": self.password})
 
 		self.cust_id = customer.json()["id"]
 
