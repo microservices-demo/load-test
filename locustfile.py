@@ -29,10 +29,14 @@ class APITasks(TaskSet):
 	@task
 	def purchaseItem(self):
 		self.createCustomer()
+		self.createCard()
+		self.createAddress()
 		self.login()
 		self.addItemToCart()
 		self.buy()
 		self.deleteCustomer()
+		self.deleteCard()
+		self.deleteAddress()
 
 	# @task
 	# def addRemoveFromCart(self):
@@ -68,27 +72,31 @@ class APITasks(TaskSet):
 		# self.cust_id = login.cookies["logged_in"]
 
 	def createCustomer(self):
-		# TODO just use same address/card for all generated customers?
-		address = self.client.post("/addresses", json={"street": "my road", "number": "3", "country": "UK", "city": "London"})
-
-		self.address_id = address.json()["_links"]["self"]["href"][26:]
-		card = self.client.post("/cards", json={"longNum": "5429804235432", "expires": "04/16", "ccv": "432"})
-
-		self.card_id = card.json()["_links"]["self"]["href"][22:]
 		global counter
 		counter += 1
 		self.username = "test_user_" + str(uuid.uuid4())
 
 		self.password = "test_password"
-		customer = self.client.post("/customers", json={"firstName": "testUser_" + str(counter), "lastName": "Last_Name", "username": self.username, "addresses": ["http://accounts/addresses/" + self.address_id], "cards": ["http://accounts/cards/" + self.card_id]})
+		customer = self.client.post("/customers", json={"firstName": "testUser_" + str(counter), "lastName": "Last_Name", "username": self.username})
 
-		self.cust_id = customer.json()["_links"]["self"]["href"][27:]
-		self.client.get("/register?username=" + self.username + "&password=" + self.password)
+		self.cust_id = customer.json()["id"]
+
+	def createCard(self):
+		self.client.post("/cards", json={"longNum": "5429804235432", "expires": "04/16", "ccv": "432"})
+		card = self.client.post("/cards", json={"longNum": "5429804235432", "expires": "04/16", "ccv": "432", "userId": self.cust_id})
+		self.card_id = card.json()["id"]	
+	
+	def createAddress(self):
+		self.client.post("/addresses", json={"street": "my road", "number": "3", "country": "UK", "city": "London"})
+		addr = self.client.post("/addresses", json={"street": "my road", "number": "3", "country": "UK", "city": "London", "userId":self.cust_id})
+		self.addr_id = addr.json()["id"]
 
 	def deleteCustomer(self):
 		self.client.delete("/customers/" + self.cust_id)
-		self.client.delete("/addresses/" + self.address_id)
+	def deleteCard(self):
 		self.client.delete("/cards/" + self.card_id)
+	def deleteAddress(self):
+		self.client.delete("/addresses/" + self.addr_id)
 
 class ErrorTasks(TaskSet):
 
