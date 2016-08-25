@@ -64,7 +64,8 @@ class APITasks(TaskSet):
 		self.client.post("/cart", json={"id": self.item_id, "quantity": 1})
 
 	def buy(self):
-		self.client.post("/orders", json={"customer": self.cust_id})
+		cookie = {'logged_in': self.cust_id}
+		self.client.post("/orders", cookies=cookie)
 
 	def login(self):
 		base64string = base64.encodestring('%s:%s' % (self.username, self.password)).replace('\n', '')
