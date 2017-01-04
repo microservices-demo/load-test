@@ -1,10 +1,26 @@
 from faker import Faker
+from functools import wraps
 from locust import HttpLocust, TaskSet, task
 from random import randint, choice
+from requests import Response
 
 import base64
 import json
 
+
+'''Decorator to turn python exceptions into 500 responses'''
+def exception_protect(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            func(*args, **kwargs)
+        except Exception as e:
+            response = Response()
+            response.status_code = 404
+            response.reason = str(e)
+            response._content = str(e)
+            return response
+    return wrapper
 
 def register(l):
     details = {
@@ -16,6 +32,7 @@ def register(l):
     }
     return l.client.post("/register", json=details)
 
+@exception_protect
 def login(l):
     users = l.client.get("/customers").json().get("_embedded", {}).get("customer", [])
     user = [user for user in users if user.get('username') == l.user.get('username')]
@@ -54,6 +71,7 @@ class CataloguePage(TaskSet):
         self.client.get("/category.html")
 
     @task(10)
+    @exception_protect
     def filter(self):
         tags = self.client.get("/tags").json().get("tags")
         rand = randint(1, len(tags)-1)
@@ -71,12 +89,14 @@ class CataloguePage(TaskSet):
     class ItemPage(TaskSet):
 
         @task(10)
+        @exception_protect
         def item(self):
             response = self.client.get("/catalogue")
             catalogue = response.json()
             self.client.get("/detail.html?id={}".format(choice(catalogue).get('id')))
 
         @task(5)
+        @exception_protect
         def order(self):
             catalogue = self.client.get("/catalogue").json()
             category_item = choice(catalogue)
@@ -99,6 +119,7 @@ class CartPage(TaskSet):
         self.client.get("/basket.html")
 
     @task(5)
+    @exception_protect
     def delete_item(self):
         cart_items = self.client.get("/cart").json()
         if len(cart_items) > 0:
@@ -106,6 +127,7 @@ class CartPage(TaskSet):
             self.client.delete("/cart/{}".format(item.get("itemId")))
 
     @task(5)
+    @exception_protect
     def checkout(self):
         if self.client.cookies.get("logged_in"):
             create_card(self)
@@ -169,12 +191,14 @@ class CartTasks(TaskSet):
         self.client.delete("/cart")
 
     @task
+    @exception_protect
     def delete_cart_item(self):
         response = self.post_cart()
         body_json = json.loads(response.request.body)
         self.client.delete("/cart/{}".format(body_json.get('id')))
 
     @task
+    @exception_protect
     def post_cart(self):
         catalogue = self.client.get("/catalogue").json()
         category_item = choice(catalogue)
@@ -192,6 +216,7 @@ class CartTasks(TaskSet):
 class CatalogueTasks(TaskSet):
 
     @task
+    @exception_protect
     def get_catalogue_images(self):
         catalogue = self.client.get('/catalogue').json()
         image_urls = choice(catalogue).get('imageUrl')
@@ -224,6 +249,7 @@ class OrdersTasks(TaskSet):
         self.client.get('/orders')
 
     @task
+    @exception_protect
     def post_orders(self):
         login(self)
         create_card(self)
@@ -261,12 +287,14 @@ class UsersTasks(TaskSet):
     password = Faker().password()
 
     @task
+    @exception_protect
     def get_customer_id(self):
         response = self.post_register()
         customer = response.json()
         return self.client.get('/customers/{}'.format(customer.get('id')))
 
     @task
+    @exception_protect
     def get_cards_id(self):
         response = self.post_register()
         customer = response.json()
@@ -308,18 +336,21 @@ class UsersTasks(TaskSet):
         create_card(self)
 
     @task
+    @exception_protect
     def delete_customer(self):
         response = self.post_register()
         customer = response.json()
         self.client.delete('/customers/{}'.format(customer.get('id')))
 
     @task
+    @exception_protect
     def delete_addresses(self):
         response = self.post_register()
         customer = response.json()
         self.client.delete('/addresses/{}'.format(customer.get('id')))
 
     @task
+    @exception_protect
     def delete_cards(self):
         response = self.post_register()
         customer = response.json()
