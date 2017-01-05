@@ -1,29 +1,35 @@
 from faker import Faker
 from locust import HttpLocust, TaskSet, task
 from random import randint, choice
+from time import sleep
 
 import base64
-import json
 
 
 def register(l):
+    _user = getattr(l, 'user', getattr(l.parent, 'user', Faker().simple_profile()))
+    _password = getattr(l, 'password', getattr(l.parent, 'password', Faker().password()))
     details = {
-        "username": l.user.get('username'),
-        "first_name": l.user.get('name').split(' ')[0],
-        "last_name": l.user.get('name').split(' ')[1],
-        "email": l.user.get('mail'),
-        "password": l.password
+        "username": _user.get('username'),
+        "first_name": _user.get('name').split(' ')[0],
+        "last_name": _user.get('name').split(' ')[1],
+        "email": _user.get('mail'),
+        "password": _password
     }
-    return l.client.post("/register", json=details)
+    response = l.client.post("/register", json=details)
+    return response
 
 def login(l):
+    _user = getattr(l, 'user', getattr(l.parent, 'user', Faker().simple_profile()))
+    _password = getattr(l, 'password', getattr(l.parent, 'password', Faker().password()))
     users = l.client.get("/customers").json().get("_embedded", {}).get("customer", [])
-    user = [user for user in users if user.get('username') == l.user.get('username')]
+    user = [user for user in users if user.get('username') == _user.get('username')]
     if not user:
         register(l)
 
-    base64string = base64.encodestring('%s:%s' % (l.user.get('username'), l.password)).replace('\n', '')
-    return l.client.get("/login", headers={"Authorization":"Basic %s" % base64string})
+    base64string = base64.encodestring('%s:%s' % (_user.get('username'), _password)).replace('\n', '')
+    response = l.client.get("/login", headers={"Authorization":"Basic %s" % base64string})
+    return response
 
 def create_card(l):
     data = {
@@ -31,7 +37,8 @@ def create_card(l):
         "expires": Faker().credit_card_expire(start="now", end="+10y", date_format="%m/%y"),
         "ccv": Faker().credit_card_security_code()
     }
-    return l.client.post("/cards", json=data)
+    response = l.client.post("/cards", json=data)
+    return response
 
 def create_address(l):
     data = {
@@ -41,7 +48,8 @@ def create_address(l):
         "postcode": Faker().postcode(),
         "country": Faker().country()
     }
-    return l.client.post("/addresses", json=data)
+    response = l.client.post("/addresses", json=data)
+    return response
 
 
 '''
@@ -72,8 +80,7 @@ class CataloguePage(TaskSet):
 
         @task(10)
         def item(self):
-            response = self.client.get("/catalogue")
-            catalogue = response.json()
+            catalogue = self.client.get("/catalogue").json()
             self.client.get("/detail.html?id={}".format(choice(catalogue).get('id')))
 
         @task(5)
@@ -107,16 +114,18 @@ class CartPage(TaskSet):
 
     @task(5)
     def checkout(self):
-        if self.client.cookies.get("logged_in"):
-            create_card(self)
-            create_address(self)
-            with self.client.post("/orders", catch_response=True) as response:
-                if response.status_code == 406:
-                    # Check if the cost was too high
-                    items = self.client.get("/cart").json()
-                    total = sum([item.get("unitPrice", 0) * item.get("quantity", 0) for item in items])
-                    if total > 100:
-                        response.success()
+        if not self.client.cookies.get("logged_in"):
+            login(self)
+        create_card(self)
+        create_address(self)
+
+        with self.client.post("/orders", catch_response=True) as response:
+            if response.status_code == 406:
+                # Check if the cost was too high
+                items = self.client.get("/cart").json()
+                total = sum([item.get("unitPrice", 0) * item.get("quantity", 0) for item in items])
+                if total > 100:
+                    response.success()
 
     @task(5)
     def stop(self):
@@ -170,17 +179,16 @@ class CartTasks(TaskSet):
 
     @task
     def delete_cart_item(self):
-        response = self.post_cart()
-        body_json = json.loads(response.request.body)
-        self.client.delete("/cart/{}".format(body_json.get('id')))
+        item_id = self.post_cart()
+        self.client.delete("/cart/{}".format(item_id))
 
     @task
     def post_cart(self):
         catalogue = self.client.get("/catalogue").json()
         category_item = choice(catalogue)
-        item_id = category_item["id"]
-        return self.client.post("/cart", json={"id": item_id, "quantity": randint(1, 100)})
-
+        item_id = category_item.get("id")
+        self.client.post("/cart", json={"id": item_id, "quantity": randint(1, 100)})
+        return item_id
 
 '''
     Catalogue related API tasks
@@ -214,18 +222,16 @@ class CatalogueTasks(TaskSet):
     POST /orders
 '''
 class OrdersTasks(TaskSet):
-    user = Faker().simple_profile()
-    password = Faker().password()
 
     @task
     def get_orders(self):
-        login(self)
         self.post_orders()
         self.client.get('/orders')
 
     @task
     def post_orders(self):
-        login(self)
+        if not self.client.cookies.get("logged_in"):
+            login(self)
         create_card(self)
         create_address(self)
 
@@ -257,8 +263,6 @@ class OrdersTasks(TaskSet):
     POST /login
 '''
 class UsersTasks(TaskSet):
-    user = Faker().simple_profile()
-    password = Faker().password()
 
     @task
     def get_customer_id(self):
@@ -309,20 +313,17 @@ class UsersTasks(TaskSet):
 
     @task
     def delete_customer(self):
-        response = self.post_register()
-        customer = response.json()
+        customer = self.post_register().json()
         self.client.delete('/customers/{}'.format(customer.get('id')))
 
     @task
     def delete_addresses(self):
-        response = self.post_register()
-        customer = response.json()
+        customer = self.post_register().json()
         self.client.delete('/addresses/{}'.format(customer.get('id')))
 
     @task
     def delete_cards(self):
-        response = self.post_register()
-        customer = response.json()
+        customer = self.post_register().json()
         self.client.delete('/cards/{}'.format(customer.get('id')))
 
     @task
@@ -333,8 +334,6 @@ class UsersTasks(TaskSet):
 
     @task
     def post_login(self):
-        self.user = Faker().simple_profile()
-        self.password = Faker().password()
         login(self)
 
 
@@ -343,7 +342,8 @@ class UsersTasks(TaskSet):
 '''
 class APITasks(TaskSet):
     tasks = [CartTasks, CatalogueTasks, OrdersTasks, UsersTasks]
-
+    user = Faker().simple_profile()
+    password = Faker().password()
 
 '''
     Describe tasks that result in an error
