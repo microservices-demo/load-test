@@ -13,7 +13,7 @@ script:
   - curl -o docker-compose.yml -sSL https://raw.githubusercontent.com/microservices-demo/microservices-demo/master/deploy/docker-compose/docker-compose.yml
   - docker-compose -f docker-compose.yml up -d
   - docker build -t weaveworksdemos/load-test .
-  - docker run --rm -t weaveworksdemos/load-test -d 120 -h edge-router -c 3 -r 500
+  - docker run --rm --net loadtest_default -t weaveworksdemos/load-test -d 180 -h edge-router -c 250 -r 2500
 
 after_success:
   - set -e;
