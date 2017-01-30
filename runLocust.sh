@@ -17,13 +17,13 @@ do_check() {
   # check hostname is not empty
   if [ "${TARGET_HOST}x" == "x" ]; then
     echo "TARGET_HOST is not set; use '-h hostname:port'"
-    exit 0
+    exit 1
   fi
 
   # check for locust
   if [ ! `command -v locust` ]; then
     echo "Python 'locust' package is not found!"
-    exit 0
+    exit 1
   fi
 
   # check locust file is present
@@ -42,7 +42,7 @@ do_exec() {
   STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${TARGET_HOST}) 
   if [ $STATUS -ne 200 ]; then
       echo "${TARGET_HOST} is not accessible"
-      exit 0
+      exit 1
   fi
 
   echo "Will run $LOCUST_FILE against $TARGET_HOST. Spawning $CLIENTS clients and $REQUESTS total requests."
