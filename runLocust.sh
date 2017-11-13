@@ -53,7 +53,7 @@ do_exec() {
 do_usage() {
     cat >&2 <<EOF
 Usage:
-  ${SCRIPT_NAME} [ http://hostname/ ] OPTIONS
+  ${SCRIPT_NAME} [ hostname ] OPTIONS
 
 Options:
   -d  Delay before starting
